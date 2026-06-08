@@ -206,11 +206,14 @@ textarea{resize:vertical;min-height:60px;line-height:1.5;}
 .api-status.ok{color:var(--green);}
 .api-status.none{color:var(--mid);}
 
-.prazo-ato{display:inline-flex;align-items:center;gap:0.4rem;font-family:'DM Mono',monospace;font-size:0.62rem;padding:2px 8px;border-radius:3px;margin-top:3px;}
-.prazo-ato.normal{background:#e8f5ee;color:var(--green);border:1px solid #8ec8a8;}
-.prazo-ato.aviso{background:#fff3cd;color:#856404;border:1px solid #ffc107;}
-.prazo-ato.urgente{background:#fdeaea;color:var(--red);border:1px solid #e8a0a0;animation:blink 1.5s infinite;}
-.prazo-ato.vencido{background:#fdeaea;color:var(--red);border:1px solid #e8a0a0;font-weight:bold;}
+.prazo-ato{display:inline-flex;align-items:center;gap:0.5rem;font-family:'DM Sans',sans-serif;font-size:0.78rem;padding:6px 12px;border-radius:4px;margin-top:6px;border-left:3px solid;line-height:1.4;}
+.prazo-ato .prazo-label{font-family:'DM Mono',monospace;font-size:0.62rem;text-transform:uppercase;letter-spacing:0.08em;opacity:0.7;display:block;}
+.prazo-ato .prazo-data{font-weight:600;display:block;}
+.prazo-ato .prazo-dias{font-family:'DM Mono',monospace;font-size:0.68rem;opacity:0.85;display:block;}
+.prazo-ato.normal{background:#f0faf4;color:#1a5c3a;border-color:#1a5c3a;}
+.prazo-ato.aviso{background:#fffbf0;color:#7a4f00;border-color:#c8963e;}
+.prazo-ato.urgente{background:#fff5f5;color:#8b2020;border-color:#8b2020;animation:blink 1.5s infinite;}
+.prazo-ato.vencido{background:#fdeaea;color:#8b2020;border-color:#8b2020;}
 
 .empty-state{text-align:center;padding:3rem 2rem;color:var(--mid);}
 .empty-icon{font-size:2.5rem;margin-bottom:0.75rem;opacity:0.4;}
@@ -353,7 +356,6 @@ textarea{resize:vertical;min-height:60px;line-height:1.5;}
   <div class="content-header">
     <span class="results-count" id="results-count">— processos</span>
     <div class="sort-bar">
-      <button class="btn btn-orange btn-sm" onclick="sincronizarTodos()" id="btn-sync-all">⟳ Atualizar Todos</button>
       <button class="btn btn-green btn-sm" onclick="baixarPDFAndamentos()" id="btn-pdf-and">↓ PDF do Dia</button>
       <select onchange="ordenar(this.value)" style="font-family:'DM Mono',monospace;font-size:0.7rem;padding:0.25rem 0.5rem;">
         <option value="recente">Mais Recentes</option>
@@ -1027,26 +1029,45 @@ function renderPrazoAto(andamento, p) {
   if (!prazo || !prazo.label) return '';
   
   let classe = 'normal';
-  let icone = '📅';
-  let texto = '';
+  let icone = '§';
+  let labelTexto = '';
+  let dataTexto = '';
+  let diasTexto = '';
   
   if (prazo.vencido) {
     classe = 'vencido';
-    icone = '🚨';
-    texto = prazo.label + ': VENCIDO em ' + prazo.dataFimFormatada + ' (' + Math.abs(prazo.diasRestantes) + 'd atrás)';
+    icone = '⚠';
+    labelTexto = 'Prazo Fatal — ' + prazo.label;
+    dataTexto = 'VENCIDO em ' + prazo.dataFimFormatada;
+    diasTexto = Math.abs(prazo.diasRestantes) + ' dia(s) em atraso';
   } else if (prazo.urgente) {
     classe = 'urgente';
-    icone = '⚠️';
-    texto = prazo.label + ': ' + prazo.dataFimFormatada + ' (' + prazo.diasRestantes + 'd)';
+    icone = '⚠';
+    labelTexto = 'Prazo Fatal — ' + prazo.label;
+    dataTexto = prazo.dataFimFormatada;
+    diasTexto = 'Restam ' + prazo.diasRestantes + ' dia(s) corrido(s) · ' + prazo.diasUteis + ' dias úteis contados da intimação';
   } else if (prazo.aviso) {
     classe = 'aviso';
-    icone = '⏰';
-    texto = prazo.label + ': ' + prazo.dataFimFormatada + ' (' + prazo.diasRestantes + 'd)';
+    icone = '§';
+    labelTexto = 'Prazo Fatal — ' + prazo.label;
+    dataTexto = prazo.dataFimFormatada;
+    diasTexto = 'Restam ' + prazo.diasRestantes + ' dia(s) corrido(s) · ' + prazo.diasUteis + ' dias úteis contados da intimação';
   } else {
-    texto = prazo.label + ': ' + prazo.dataFimFormatada + ' (' + prazo.diasRestantes + 'd úteis/' + prazo.diasUteis + 'd)';
+    classe = 'normal';
+    icone = '§';
+    labelTexto = 'Prazo Fatal — ' + prazo.label;
+    dataTexto = prazo.dataFimFormatada;
+    diasTexto = 'Restam ' + prazo.diasRestantes + ' dia(s) corrido(s) · ' + prazo.diasUteis + ' dias úteis contados da intimação';
   }
   
-  return '<div class="prazo-ato ' + classe + '">' + icone + ' ' + esc(texto) + '</div>';
+  return '<div class="prazo-ato ' + classe + '">' +
+    '<span style="font-size:1rem;opacity:0.6;">' + icone + '</span>' +
+    '<div>' +
+      '<span class="prazo-label">' + esc(labelTexto) + '</span>' +
+      '<span class="prazo-data">' + esc(dataTexto) + '</span>' +
+      '<span class="prazo-dias">' + esc(diasTexto) + '</span>' +
+    '</div>' +
+  '</div>';
 }
 
 function renderCard(p){
