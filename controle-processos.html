@@ -627,9 +627,9 @@ function classif(t){ const s=t.toLowerCase(); if(s.includes('audiência')||s.inc
 
 async function sincronizarProcesso(id, silent=false){
   const apiKey=localStorage.getItem('nu_djkey');
-  if(!apiKey&&!silent){toast('Configure a APIKey do DataJud','aviso');return 0;}
   const p=PROCESSOS.find(x=>x.id===id); if(!p)return 0;
-  const tribunal=detectarTribunal(p.numero); if(!tribunal)return 0;
+  const tribunal=detectarTribunal(p.numero);
+  if(!tribunal){ if(!silent)toast('Tribunal não identificado pelo número CNJ','aviso'); return 0; }
 
   const existentes=new Set((p.andamentos||[]).map(a=>`${a.data}|${a.texto}`));
   let novos=[];
