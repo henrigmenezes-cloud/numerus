@@ -206,6 +206,12 @@ textarea{resize:vertical;min-height:60px;line-height:1.5;}
 .api-status.ok{color:var(--green);}
 .api-status.none{color:var(--mid);}
 
+.prazo-ato{display:inline-flex;align-items:center;gap:0.4rem;font-family:'DM Mono',monospace;font-size:0.62rem;padding:2px 8px;border-radius:3px;margin-top:3px;}
+.prazo-ato.normal{background:#e8f5ee;color:var(--green);border:1px solid #8ec8a8;}
+.prazo-ato.aviso{background:#fff3cd;color:#856404;border:1px solid #ffc107;}
+.prazo-ato.urgente{background:#fdeaea;color:var(--red);border:1px solid #e8a0a0;animation:blink 1.5s infinite;}
+.prazo-ato.vencido{background:#fdeaea;color:var(--red);border:1px solid #e8a0a0;font-weight:bold;}
+
 .empty-state{text-align:center;padding:3rem 2rem;color:var(--mid);}
 .empty-icon{font-size:2.5rem;margin-bottom:0.75rem;opacity:0.4;}
 .empty-title{font-family:'Playfair Display',serif;font-size:1.15rem;color:var(--ink);margin-bottom:0.4rem;}
@@ -440,6 +446,218 @@ textarea{resize:vertical;min-height:60px;line-height:1.5;}
 </div>
 
 <script>
+// ══════════════════════════════════════════════════════
+// MÓDULO DE PRAZOS — Numerus
+// Calcula prazos processuais em dias úteis
+// com feriados nacionais, SP, AL e SE
+// ══════════════════════════════════════════════════════
+
+// ── FERIADOS FIXOS (dia/mês) ──────────────────────────
+const FERIADOS_NACIONAIS_FIXOS = [
+  '01/01', // Confraternização Universal
+  '21/04', // Tiradentes
+  '01/05', // Dia do Trabalho
+  '07/09', // Independência
+  '12/10', // Nossa Senhora Aparecida
+  '02/11', // Finados
+  '15/11', // Proclamação da República
+  '20/11', // Consciência Negra
+  '25/12', // Natal
+];
+
+const FERIADOS_SP_FIXOS = [
+  '09/07', // Revolução Constitucionalista
+];
+
+const FERIADOS_AL_FIXOS = [
+  '16/09', // Emancipação Política de Alagoas
+  '24/06', // São João (principal municipio)
+];
+
+const FERIADOS_SE_FIXOS = [
+  '08/07', // Emancipação Política de Sergipe
+];
+
+// ── FERIADOS MÓVEIS ───────────────────────────────────
+// Calcula baseado na Páscoa (algoritmo de Gauss)
+function calcularPascoa(ano) {
+  const a = ano % 19;
+  const b = Math.floor(ano / 100);
+  const c = ano % 100;
+  const d = Math.floor(b / 4);
+  const e = b % 4;
+  const f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3);
+  const h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4);
+  const k = c % 4;
+  const l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const mes = Math.floor((h + l - 7 * m + 114) / 31);
+  const dia = ((h + l - 7 * m + 114) % 31) + 1;
+  return new Date(ano, mes - 1, dia);
+}
+
+function getFeriadosMoveis(ano) {
+  const pascoa = calcularPascoa(ano);
+  const datas = [];
+
+  // Carnaval (47 e 48 dias antes da Páscoa)
+  const carnaval1 = new Date(pascoa); carnaval1.setDate(pascoa.getDate() - 48);
+  const carnaval2 = new Date(pascoa); carnaval2.setDate(pascoa.getDate() - 47);
+  datas.push(carnaval1, carnaval2);
+
+  // Sexta-Feira Santa (2 dias antes da Páscoa)
+  const sextaSanta = new Date(pascoa); sextaSanta.setDate(pascoa.getDate() - 2);
+  datas.push(sextaSanta);
+
+  // Páscoa
+  datas.push(new Date(pascoa));
+
+  // Corpus Christi (60 dias após Páscoa)
+  const corpus = new Date(pascoa); corpus.setDate(pascoa.getDate() + 60);
+  datas.push(corpus);
+
+  return datas.map(d => formatarDDMM(d));
+}
+
+function formatarDDMM(d) {
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  return dd + '/' + mm;
+}
+
+function formatarDDMMAAAA(d) {
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  return dd + '/' + mm + '/' + d.getFullYear();
+}
+
+// ── VERIFICAR SE É FERIADO ────────────────────────────
+function ehFeriado(data, estado) {
+  const ddmm = formatarDDMM(data);
+  const ano = data.getFullYear();
+  const moveis = getFeriadosMoveis(ano);
+
+  if (FERIADOS_NACIONAIS_FIXOS.includes(ddmm)) return true;
+  if (moveis.includes(ddmm)) return true;
+
+  if (estado === 'SP' && FERIADOS_SP_FIXOS.includes(ddmm)) return true;
+  if (estado === 'AL' && FERIADOS_AL_FIXOS.includes(ddmm)) return true;
+  if (estado === 'SE' && FERIADOS_SE_FIXOS.includes(ddmm)) return true;
+
+  return false;
+}
+
+function ehDiaUtil(data, estado) {
+  const diaSemana = data.getDay();
+  if (diaSemana === 0 || diaSemana === 6) return false; // fim de semana
+  if (ehFeriado(data, estado)) return false;
+  return true;
+}
+
+// ── CALCULAR PRAZO ────────────────────────────────────
+function calcularPrazo(dataInicio, diasUteis, estado) {
+  const d = new Date(dataInicio + 'T00:00:00');
+  let contagem = 0;
+
+  // Prazo começa no dia seguinte
+  d.setDate(d.getDate() + 1);
+
+  while (contagem < diasUteis) {
+    if (ehDiaUtil(d, estado)) contagem++;
+    if (contagem < diasUteis) d.setDate(d.getDate() + 1);
+  }
+
+  // Se o prazo cai em dia não útil, avança para o próximo
+  while (!ehDiaUtil(d, estado)) {
+    d.setDate(d.getDate() + 1);
+  }
+
+  return d.toISOString().split('T')[0];
+}
+
+// ── DETECTAR ESTADO DO TRIBUNAL ───────────────────────
+function detectarEstado(vara, tipo, numero) {
+  const t = (vara || '').toLowerCase() + (tipo || '').toLowerCase();
+  const num = (numero || '');
+  
+  // TT do número CNJ indica tribunal
+  const d = num.replace(/\D/g, '');
+  if (d.length >= 16) {
+    const tt = d.slice(14, 16);
+    if (['01','02','03','05'].includes(tt)) return 'AL'; // TJAL e TRFs nordeste
+    if (tt === '25') return 'SE'; // TJSE  
+    if (tt === '26') return 'SP'; // TJSP
+  }
+  
+  if (t.includes('alagoas') || t.includes('tjal') || t.includes('maceió')) return 'AL';
+  if (t.includes('sergipe') || t.includes('tjse') || t.includes('aracaju')) return 'SE';
+  return 'SP'; // padrão
+}
+
+// ── TABELA DE PRAZOS POR TIPO DE ATO ─────────────────
+const PRAZOS_ATOS = [
+  // Intimações e citações
+  { palavras: ['citação', 'citado', 'citar'], dias: 15, label: 'Contestação' },
+  { palavras: ['intimação', 'intimado', 'intimar'], dias: 15, label: 'Manifestação' },
+  
+  // Recursos
+  { palavras: ['sentença', 'julgamento', 'julgado', 'procedente', 'improcedente', 'extinto'], dias: 15, label: 'Apelação' },
+  { palavras: ['acórdão', 'acordão'], dias: 15, label: 'Recurso' },
+  { palavras: ['decisão interlocutória', 'decisão monocrática'], dias: 15, label: 'Agravo de Instrumento' },
+  { palavras: ['embargos de declaração', 'omissão', 'contradição', 'obscuridade'], dias: 5, label: 'Embargos de Declaração' },
+  
+  // Prazos específicos
+  { palavras: ['contrarrazões', 'contrarrazao'], dias: 15, label: 'Contrarrazões' },
+  { palavras: ['réplica', 'replica'], dias: 15, label: 'Réplica' },
+  { palavras: ['manifestar', 'manifestação', 'manifestacao', 'fale', 'pronuncie'], dias: 15, label: 'Manifestação' },
+  { palavras: ['cumprir', 'cumprimento', 'pagar', 'pagamento', 'depositar'], dias: 15, label: 'Cumprimento' },
+  { palavras: ['audiência', 'audiencia'], dias: null, label: 'Audiência (ver data)' },
+  { palavras: ['juntada', 'petição', 'peticao', 'protocolo'], dias: null, label: null }, // sem prazo automático
+  { palavras: ['despacho'], dias: 5, label: 'Manifestação' },
+  { palavras: ['decurso', 'prazo decorrido', 'arquivamento'], dias: null, label: null },
+];
+
+function detectarPrazo(textoAndamento) {
+  const t = textoAndamento.toLowerCase();
+  for (const ato of PRAZOS_ATOS) {
+    if (ato.palavras.some(p => t.includes(p))) {
+      return { dias: ato.dias, label: ato.label };
+    }
+  }
+  return { dias: null, label: null };
+}
+
+// ── CALCULAR PRAZO DE UM ANDAMENTO ───────────────────
+function calcularPrazoAndamento(andamento, vara, tipo, numero) {
+  if (!andamento || !andamento.data || !andamento.texto) return null;
+  
+  const { dias, label } = detectarPrazo(andamento.texto);
+  if (!dias) return null;
+  
+  const estado = detectarEstado(vara, tipo, numero);
+  const dataFim = calcularPrazo(andamento.data, dias, estado);
+  
+  const hoje = new Date();
+  hoje.setHours(0, 0, 0, 0);
+  const fim = new Date(dataFim + 'T00:00:00');
+  const diffDias = Math.round((fim - hoje) / (1000 * 60 * 60 * 24));
+  
+  return {
+    dataFim,
+    dataFimFormatada: formatarDDMMAAAA(fim),
+    diasRestantes: diffDias,
+    diasUteis: dias,
+    label,
+    estado,
+    urgente: diffDias <= 3,
+    aviso: diffDias <= 5 && diffDias > 3,
+    vencido: diffDias < 0
+  };
+}
+
+
 // ══════════════════════════════════════════════════════
 // CONFIG
 // ══════════════════════════════════════════════════════
@@ -804,6 +1022,33 @@ function renderizar(){
 
 const tipoColors={'Protocolo':'tipo-protocolo','Audiência':'tipo-audiencia','Decisão':'tipo-decisao','Recurso':'tipo-recurso','Despacho':'tipo-despacho'};
 
+function renderPrazoAto(andamento, p) {
+  const prazo = calcularPrazoAndamento(andamento, p.vara, p.tipo, p.numero);
+  if (!prazo || !prazo.label) return '';
+  
+  let classe = 'normal';
+  let icone = '📅';
+  let texto = '';
+  
+  if (prazo.vencido) {
+    classe = 'vencido';
+    icone = '🚨';
+    texto = prazo.label + ': VENCIDO em ' + prazo.dataFimFormatada + ' (' + Math.abs(prazo.diasRestantes) + 'd atrás)';
+  } else if (prazo.urgente) {
+    classe = 'urgente';
+    icone = '⚠️';
+    texto = prazo.label + ': ' + prazo.dataFimFormatada + ' (' + prazo.diasRestantes + 'd)';
+  } else if (prazo.aviso) {
+    classe = 'aviso';
+    icone = '⏰';
+    texto = prazo.label + ': ' + prazo.dataFimFormatada + ' (' + prazo.diasRestantes + 'd)';
+  } else {
+    texto = prazo.label + ': ' + prazo.dataFimFormatada + ' (' + prazo.diasRestantes + 'd úteis/' + prazo.diasUteis + 'd)';
+  }
+  
+  return '<div class="prazo-ato ' + classe + '">' + icone + ' ' + esc(texto) + '</div>';
+}
+
 function renderCard(p){
   const and=p.andamentos||[];
   const ultimoAnd=and[0];
@@ -873,6 +1118,7 @@ function renderCard(p){
                 ${podeEditar?`<button onclick="excluirAndamento('${p.id}',${i});event.stopPropagation()" style="margin-left:auto;background:none;border:none;cursor:pointer;color:var(--mid);font-size:0.75rem;">✕</button>`:''}
               </div>
               <div class="tentry-text">${esc(a.texto)}</div>
+              ${i===0?renderPrazoAto(a,p):''}
             </div>`).join('')
           }
           ${and.length>10?`<div style="font-size:0.7rem;color:var(--mid);font-family:'DM Mono',monospace;padding:0.25rem 0;">+ ${and.length-10} andamentos anteriores</div>`:''}
