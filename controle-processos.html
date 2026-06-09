@@ -349,6 +349,7 @@ textarea{resize:vertical;min-height:60px;line-height:1.5;}
     <div class="sort-bar">
       <button class="btn btn-green btn-sm" onclick="baixarPDFAndamentos()" id="btn-pdf-and">↓ PDF do Dia</button>
       <select onchange="ordenar(this.value)" style="font-family:'DM Mono',monospace;font-size:0.7rem;padding:0.25rem 0.5rem;">
+        <option value="atividade">Com Andamento Recente</option>
         <option value="recente">Mais Recentes</option>
         <option value="prazo">Por Prazo</option>
         <option value="numero">Número</option>
@@ -671,7 +672,7 @@ async function sb(path, opts={}) {
 // ══════════════════════════════════════════════════════
 async function sha256(s){ const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s)); return Array.from(new Uint8Array(b)).map(x=>x.toString(16).padStart(2,'0')).join(''); }
 
-let USER=null, USUARIOS=[], PROCESSOS=[], FILTRO='todos', ORDEM='recente';
+let USER=null, USUARIOS=[], PROCESSOS=[], FILTRO='todos', ORDEM='atividade';
 let andamentosNovosHoje = [];
 
 async function fazerLogin(){
@@ -997,7 +998,16 @@ function getFiltrados(){
     if(busca){const t=`${p.numero} ${p.autor} ${p.reu} ${p.vara||''} ${p.tipo||''} ${p.obs||''} ${p.responsavel_nome||''}`.toLowerCase();if(!t.includes(busca))return false;}
     return true;
   });
-  if(ORDEM==='recente') lista.sort((a,b)=>new Date(b.criado_em)-new Date(a.criado_em));
+  if(ORDEM==='atividade') lista.sort((a,b)=>{
+    // Pega data do andamento mais recente ou data de atualização
+    const getUltimo = p => {
+      const ands = p.andamentos||[];
+      if(ands.length>0 && ands[0].criado_em) return new Date(ands[0].criado_em);
+      return new Date(p.atualizado_em||p.criado_em||0);
+    };
+    return getUltimo(b) - getUltimo(a);
+  });
+  else if(ORDEM==='recente') lista.sort((a,b)=>new Date(b.criado_em)-new Date(a.criado_em));
   else if(ORDEM==='prazo') lista.sort((a,b)=>{ const da=diasParaPrazo(a.prazo)??9999,db=diasParaPrazo(b.prazo)??9999; return da-db; });
   else if(ORDEM==='numero') lista.sort((a,b)=>a.numero.localeCompare(b.numero));
   else if(ORDEM==='autor') lista.sort((a,b)=>a.autor.localeCompare(b.autor));
