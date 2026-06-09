@@ -738,7 +738,7 @@ async function excluirUsuario(id){ if(!confirm('Excluir usuário?'))return; try{
 async function carregarProcessos(){
   setSyncStatus('syncing','sincronizando...');
   try{
-    PROCESSOS=await sb('/processos?order=criado_em.desc&select=*')||[];
+    PROCESSOS=await sb('/processos?order=atualizado_em.desc.nullslast&select=*')||[];
     renderizar(); atualizarStats(); setSyncStatus('ok','online');
   }catch(e){ setSyncStatus('error','erro'); toast('Erro ao carregar','erro'); }
 }
